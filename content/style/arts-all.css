@@ -1,0 +1,177 @@
+@charset "UTF-8";
+@import url('https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&display=swap');
+
+
+/* TELAS PEQUENAS */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+body, html {
+
+  height: 100vh;
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+header {  /* Header -------------------------------------------------------------------------------------------------------------------- */
+  box-sizing: border-box;
+  position: relative;
+  height: calc(100% - 5em);
+  overflow: hidden;
+  padding: 1em;
+} header::after {
+  content: "";
+  width: 100%; height: 100%;
+  position: absolute;
+  left: 0em; bottom: 0em;
+  background: url(../bg-header-cracked-mobile.png) bottom center no-repeat;
+  background-size: 100%;
+} header * {
+  color: var(--color-light-grey-01);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+} header > div:nth-of-type(1) {
+  height: 80%;
+  padding-bottom: 1.5em;
+} header > div:nth-of-type(2) {
+  width: 100%; height: 20%;
+  justify-content: left;
+} header div {
+  flex-direction: column;
+  box-sizing: border-box;
+  position: relative;
+  width: 100%; height: 100%;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+main {  /* Main ------------------------------------------------------------------------------------------------------------------------ */
+  position: relative;
+  background-color: var(--color-medium-black-01);
+  min-height: 100em;
+  padding: 0em 1em;
+} main * {
+  color: var(--color-lighter-white-02);
+}
+
+
+
+
+div#social {
+  position: sticky;
+  width: fit-content;
+  top: 1.5em;
+} div#social * {
+  height: var(--social-element-size);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition-duration: var(--transition-time-01);
+} div#social > div {
+  gap: 1em;
+} div#social ul {
+  gap: 0.5em;
+  list-style-type: none;
+} div#social > ul > li > a {
+  height: fit-content;
+  transform: translateY(-0.2em);
+} div#social a:hover {
+  color: var(--color-light-grey-01);
+  font-weight: normal;
+}
+
+
+
+
+
+div#icon {
+  width: var(--size-icons);
+  border-radius: 50%;
+  border: 1px solid var(--color-light-grey-02);
+  background-color: var(--color-darkest-black-03);
+} div#icon img
+, div#icon a {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+} div#icon:hover > a {
+  width: 90%; height: 90%;
+}
+
+
+
+
+
+
+
+
+
+
+
+section#funds {
+  margin-top: 3.2em;
+  display: flex;
+  flex-direction: column;
+} section#funds * {
+}
