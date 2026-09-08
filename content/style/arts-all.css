@@ -63,7 +63,7 @@ header {  /* Header ------------------------------------------------------------
   width: 100%; height: 100%;
   position: absolute;
   left: 0em; bottom: 0em;
-  background: url(../bg-header-cracked-mobile.png) bottom center no-repeat;
+  background: url(../../../content/content/bg-header-cracked-mobile.png) bottom center no-repeat;
   background-size: 100%;
 } header * {
   color: var(--color-light-grey-01);
@@ -122,7 +122,8 @@ main {  /* Main ----------------------------------------------------------------
 div#social {
   position: sticky;
   width: fit-content;
-  top: 1.5em;
+  margin-top: 0em;
+  margin-left: 1em;
 } div#social * {
   height: var(--social-element-size);
   display: flex;
