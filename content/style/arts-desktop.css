@@ -6,7 +6,7 @@
 header {
   padding: 2em 4em 0em;
 } header::after {
-  background-image: url(../../../content/content/bg-header-cracked.png);
+  background-image: url(../../../content/content/img/bg-header-cracked.png);
 }
 
 header > div:nth-of-type(1) {
