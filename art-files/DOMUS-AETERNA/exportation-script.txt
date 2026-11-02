@@ -1,0 +1,234 @@
+import bpy
+import os
+import math
+import re
+import mathutils
+
+def limpar_nome(nome):
+    nome = nome.replace("_temp", "").replace("_TMP", "")
+    nome = nome.replace(" ", "_")
+    re_pattern = re.compile(r"[^0-9A-Za-z_\-]")
+    nome = re_pattern.sub("_", nome)
+    return nome
+
+def exportador_perfeito_lesro_engine(obj_filepath, transform_filepath):
+    original_selected = bpy.context.selected_objects.copy()
+    original_active = bpy.context.view_layer.objects.active
+
+    # Garante que os diretórios de saída existem
+    for filepath in [obj_filepath, transform_filepath]:
+        d = os.path.dirname(filepath)
+        if d and not os.path.exists(d):
+            os.makedirs(d, exist_ok=True)
+
+    bpy.ops.object.select_all(action='DESELECT')
+
+    # Coleta TODOS os meshes válidos da cena
+    todos_os_meshes = []
+    for obj in bpy.context.scene.objects:
+        if obj.type != 'MESH' or len(obj.data.vertices) == 0:
+            continue
+        if "_temp" in obj.name or "_TMP" in obj.name:
+            continue
+        todos_os_meshes.append(obj)
+
+    # Separação estrita baseada nas coleções
+    vis_objects = []
+    col_objects = []
+    
+    for obj in todos_os_meshes:
+        em_col = any(col.name == "col-map" for col in obj.users_collection)
+        em_vis = any(col.name == "vis-map" for col in obj.users_collection)
+        
+        if em_col:
+            col_objects.append(obj)
+        
+        if em_vis or not em_col:
+            vis_objects.append(obj)
+            
+    bpy.context.view_layer.update()
+
+    # 1. Exportando os Transforms (TXT)
+    with open(transform_filepath, 'w', encoding='utf-8') as f:
+        for obj in col_objects:
+            nome = limpar_nome(obj.name)
+            low = nome.lower()
+            obj_type = "UNKNOWN"
+            if low.startswith("floor"):
+                obj_type = "FLOOR"
+            elif low.startswith("wall"):
+                obj_type = "WALL"
+
+            pos_b, quat_b, _ = obj.matrix_world.decompose()
+            
+            # Conversão para o interpretador de colisões (OBB) do jogo
+            pos_dx_x = pos_b.x
+            pos_dx_y = pos_b.z
+            pos_dx_z = -pos_b.y
+            
+            quat_dx_x = quat_b.x
+            quat_dx_y = quat_b.z
+            quat_dx_z = -quat_b.y
+            quat_dx_w = quat_b.w
+            
+            f.write(f"{obj_type} {nome} {pos_dx_x:.6f} {pos_dx_y:.6f} {pos_dx_z:.6f} "
+                    f"{quat_dx_x:.6f} {quat_dx_y:.6f} {quat_dx_z:.6f} {quat_dx_w:.6f}\n")
+
+    # 2. Criando Coleção Temporária para Processar a Malha Unificada (Estilo Lero)
+    temp_col = bpy.data.collections.new("__export_tmp__")
+    bpy.context.scene.collection.children.link(temp_col)
+    
+    temp_copies = []
+    temp_meshes = []
+
+    try:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        
+        for obj in vis_objects:
+            try:
+                obj_eval = obj.evaluated_get(depsgraph)
+                mesh_data = bpy.data.meshes.new_from_object(obj_eval, preserve_all_data_layers=True, depsgraph=depsgraph)
+                temp_meshes.append(mesh_data)
+
+                mesh_copy = bpy.data.objects.new(obj.name + "_TMP", mesh_data)
+                temp_col.objects.link(mesh_copy)
+                
+                temp_copies.append((obj, mesh_copy))
+
+                for slot in obj.material_slots:
+                    mesh_copy.data.materials.append(slot.material)
+                    
+            except Exception as e:
+                print(f"Erro ao avaliar {obj.name}: {e}")
+
+        # 3. Gerando o arquivo de Geometria (OBJ Customizado)
+        with open(obj_filepath, 'w', encoding='utf-8') as f:
+            f.write("# Lesro Engine Custom Multi-UV OBJ (Lero Style Export)\n\n")
+            v_offset = vt_offset = vn_offset = 1
+
+            for i, (orig, obj) in enumerate(temp_copies):
+                mesh = obj.data
+                if len(mesh.vertices) == 0 or len(mesh.polygons) == 0 or len(mesh.loops) == 0:
+                    continue
+
+                nome_objeto = f"render_mesh_{i}"
+                f.write(f"o {nome_objeto}\n")
+
+                # Conversão de espaço Blender (Z-up) para Y-up da Lesro Engine
+                mat_world = orig.matrix_world
+                for vert in mesh.vertices:
+                    v_world = mat_world @ vert.co
+                    f.write(f"v {v_world.x:.6f} {v_world.z:.6f} {-v_world.y:.6f}\n")
+
+                # Conversão das normais de forma idêntica
+                mat_normal = mat_world.to_3x3().inverted().transposed()
+                for face in mesh.polygons:
+                    n_world = mat_normal @ face.normal
+                    n_world.normalize()
+                    f.write(f"vn {n_world.x:.6f} {n_world.z:.6f} {-n_world.y:.6f}\n")
+
+                uv1 = None
+                uv2 = None
+                
+                # 🌟 CORREÇÃO DO BUG DAS CAMADAS DE UV:
+                # Captura as referências usando strings e índices isolados de forma limpa
+                if "UVMap" in mesh.uv_layers:
+                    uv1 = mesh.uv_layers["UVMap"]
+                elif len(mesh.uv_layers) > 0:
+                    uv1 = mesh.uv_layers[0]
+
+                if "Lightmap" in mesh.uv_layers:
+                    uv2 = mesh.uv_layers["Lightmap"]
+                elif len(mesh.uv_layers) > 1:
+                    uv2 = mesh.uv_layers[1]
+
+                if uv1:
+                    for loop in mesh.loops:
+                        l_idx = int(loop.index)
+                        d = uv1.data[l_idx]
+                        f.write(f"vt1 {d.uv.x:.6f} {d.uv.y:.6f}\n")
+                else:
+                    for _ in mesh.loops:
+                        f.write("vt1 0.000000 0.000000\n")
+
+                if uv2:
+                    for loop in mesh.loops:
+                        l_idx = int(loop.index)
+                        d = uv2.data[l_idx]
+                        f.write(f"vt2 {d.uv.x:.6f} {d.uv.y:.6f}\n")
+                elif uv1:
+                    for loop in mesh.loops:
+                        l_idx = int(loop.index)
+                        d = uv1.data[l_idx]
+                        f.write(f"vt2 {d.uv.x:.6f} {d.uv.y:.6f}\n")
+                else:
+                    for _ in mesh.loops:
+                        f.write("vt2 0.000000 0.000000\n")
+
+                if obj.material_slots and len(obj.material_slots) > 0 and obj.material_slots[0].material:
+                    f.write(f"usemtl {obj.material_slots[0].material.name}\n")
+                else:
+                    f.write("usemtl default\n")
+
+                for face in mesh.polygons:
+                    indices = [int(i) for i in face.loop_indices]
+                    if len(indices) >= 3:
+                        start = int(face.loop_start)
+                        
+                        idx_0 = indices[0]
+                        v0 = int(mesh.loops[idx_0].vertex_index) + v_offset
+                        
+                        for i in range(1, len(indices) - 1):
+                            idx_i = indices[i]
+                            idx_next = indices[i + 1]
+                            
+                            vi = int(mesh.loops[idx_i].vertex_index) + v_offset
+                            v_next = int(mesh.loops[idx_next].vertex_index) + v_offset
+                            
+                            vt0_f = start + vt_offset
+                            vti_f = start + i + vt_offset
+                            vt_next_f = start + i + 1 + vt_offset
+                            
+                            vn_f = int(face.index) + vn_offset
+                            
+                            f.write(f"f {v0}/{vt0_f}/{vt0_f}/{vn_f} "
+                                    f"{vi}/{vti_f}/{vti_f}/{vn_f} "
+                                    f"{v_next}/{vt_next_f}/{vt_next_f}/{vn_f}\n")
+                f.write("\n")
+                
+                v_offset += len(mesh.vertices)
+                vt_offset += len(mesh.loops)
+                vn_offset += len(mesh.polygons)
+
+    finally:
+        # Limpeza completa dos dados temporários do Blender
+        bpy.ops.object.select_all(action='DESELECT')
+        for _, obj in temp_copies:
+            try:
+                bpy.data.objects.remove(obj, do_unlink=True)
+            except:
+                pass
+        for mesh in temp_meshes:
+            try:
+                bpy.data.meshes.remove(mesh, do_unlink=True)
+            except:
+                pass
+        try:
+            bpy.data.collections.remove(temp_col)
+        except:
+            pass
+
+        for obj in original_selected:
+            try:
+                obj.select_set(True)
+            except:
+                pass
+        if original_active and original_active.name in bpy.context.view_layer.objects:
+            bpy.context.view_layer.objects.active = original_active
+
+# Execução
+user_documents = os.path.join(os.path.expanduser("~"), "Documents", "BLENDER")
+exportador_perfeito_lesro_engine(
+    os.path.join(user_documents, "mapa_bruna.obj"),
+    os.path.join(user_documents, "mapa_bruna-transforms.txt")
+)
